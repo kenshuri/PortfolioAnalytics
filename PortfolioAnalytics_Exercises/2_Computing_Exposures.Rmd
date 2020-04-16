@@ -1,0 +1,114 @@
+---
+title: "2. Computing Exposures"
+author: "Alexis Sciau"
+date: "02/04/2020"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    code_folding: hide
+    df_print: kable
+    theme: default
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading libraries, echo=TRUE, message=FALSE}
+library(data.table)
+library(lubridate)
+```
+
+## 2.2 Simple Yield Exposure
+
+### Analytical Modified Duration
+Here, we are going to reproduce the computations made for the bond chosen as an example.
+Let's compute the figures of table 2.2!
+
+```{r input_data, echo=FALSE}
+settle_date <- as.Date("2010-08-10")
+position <- 100
+coupon <- 1.75/100
+next_coupon_date <- as.Date("2011-01-31")
+dates <- rep(next_coupon_date,10)
+for (i in 2:length(dates)){
+  dates[i] <- dates[i-1] %m+% months(6)
+}
+yield <- 1.524/100
+```
+
+```{r making_table_2_2}
+table_2_2 <- data.table(dates)
+table_2_2[,days:=dates-settle_date][,diff_time:=as.numeric(days/365)][,cf:=position*coupon/2]
+table_2_2[.N,cf:=cf+position]
+table_2_2[,df:=1/((1+yield/2)^(2*diff_time))][,cf_df:=cf*df][,diff_time_cf_df:=diff_time*cf_df]
+table_2_2
+```
+
+Thus we can compute the Analytical Modified Duration as follows :
+```{r Modified_Duration_Analytical}
+D_M_a <- 1/sum(table_2_2[,cf_df]) * 1/(1+yield/2) * sum(table_2_2[,diff_time_cf_df])
+D_M_a
+```
+
+### Numerical Modified Duration
+Now, let's compute the numerical approximation of the modified duration, also called the effective duration, with epsilon = 0.01, ie 1%, ie 100bps.
+
+```{r Modified_Duration_Numerical}
+eps<-0.01
+D_M_n_dt <- table_2_2[,.(dates,days,diff_time,cf,df)]
+D_M_n_dt[,df_p_eps:=1/((1+(yield+eps)/2)^(2*diff_time))][,df_m_eps:=1/((1+(yield-eps)/2)^(2*diff_time))]
+D_M_n_dt[,cf_df_p:=cf*df_p_eps][,cf_df_m:=cf*df_m_eps]
+D_M_n <- -1/sum(table_2_2[,cf_df]) * (sum(D_M_n_dt[,cf_df_p])-sum(D_M_n_dt[,cf_df_m]))/(2*eps)
+c("V(t,y+eps)=",as.character(sum(D_M_n_dt[,cf_df_p])))
+c("V(t,y-eps)=",as.character(sum(D_M_n_dt[,cf_df_m])))
+D_M_n
+```
+
+#### Simulations
+Finally, let's compute the numerical modified duration for multiple values of epsilon, and plot it.
+```{r numerical_approx_modified_duration}
+eps_values = seq(0.001,0.1,0.001)
+D_M_n_a=c()
+for (eps in eps_values){
+  D_M_n_dt[,df_p_eps:=1/((1+(yield+eps)/2)^(2*diff_time))][,df_m_eps:=1/((1+(yield-eps)/2)^(2*diff_time))]
+  D_M_n_dt[,cf_df_p:=cf*df_p_eps][,cf_df_m:=cf*df_m_eps]
+  D_M_n_a <- c(D_M_n_a,-1/sum(table_2_2[,cf_df]) * (sum(D_M_n_dt[,cf_df_p])-sum(D_M_n_dt[,cf_df_m]))/(2*eps))
+  
+}
+plot(D_M_n_a~eps_values)
+```
+
+## 2.3 Correcting for Our Linear Approximation
+For the sake of simplicity, we will illustrate the non-linearity of a bond price with respect to its yield on the same bond used in 2.2.
+
+```{r non_linearity}
+non_linearity_dt <- table_2_2[,.(dates,days,diff_time,cf)]
+yield_values <- seq(0.001,0.1,0.001)
+price_values <- c()
+for (yield in yield_values){
+  non_linearity_dt[,df:=1/((1+yield/2)^(2*diff_time))][,cf_df:=cf*df]
+  price_values <- c(price_values,sum(non_linearity_dt[,cf_df]))
+}
+plot(price_values~yield_values)
+```
+
+## 2.4 Time Exposure
+To illustrate the impact of time passing by on the price of a bond, we will follow the price of our bond from the initially chosen settle date, which is `r as.Date("2010-08-10")` until the next coupon date which is `r as.Date("2011-01-31")`.
+
+```{r time_exposure}
+settle_date <- as.Date("2010-08-10")
+settle_date_values<-seq(settle_date,next_coupon_date-1,1)
+price_values<-c()
+time_exp_dt <- data.table(dates)
+for (sd in settle_date_values){
+  time_exp_dt[,days:=dates-as.Date(sd,origin = "1960-10-01")][,diff_time:=as.numeric(days/365)][,cf:=position*coupon/2]
+  time_exp_dt[.N,cf:=cf+position]
+  time_exp_dt[,df:=1/((1+yield/2)^(2*diff_time))][,cf_df:=cf*df]
+  price_values <- c(price_values,sum(time_exp_dt[,cf_df]))
+}
+plot(price_values~settle_date_values)
+```

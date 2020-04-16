@@ -1,0 +1,44 @@
+---
+title: "4. Extending Our Framework"
+author: "Alexis Sciau"
+date: "07/04/2020"
+output:
+  html_document:
+    code_folding: hide
+    df_print: kable
+    theme: default
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading libraries, echo=TRUE, message=FALSE}
+library(data.table)
+library(lubridate)
+library(ggplot2)
+library(pracma)
+theme_set(theme_minimal())
+```
+
+## 4.1 Handling Inflation-Linked Bonds
+
+### 4.1.1 Revisiting Exposures
+The book presents a useful approximation to treat inflation-linked bonds as nominal yield bonds using the real rates. This approximation consist in taking the inflation risk premimum term in Fisher's theorem to be equal to zero, AND, to consider that the recent inflation (inflation  over the last three months) to be equal to the inflation at the end of the contract (over the last three months of the contract). It might be interesting to have a grasp of the size of the latter approximation : let's compute the range of the approximation for inflation ranging from 0% to 10% annualy.
+
+```{r approximation_inflation}
+range_infl = seq(0,10/100,0.01/100)
+recent_infl = c(rep(0,10/100,1001),range_infl,rep(0,10/100,1001),rev(range_infl))
+future_infl = c(range_infl,rep(0,10/100,1001),rev(range_infl),rep(0,10/100,1001))
+approx_infl_dt <- data.table(recent_infl,future_infl)
+approx_infl_dt[,diff_infl := future_infl-recent_infl]
+approx_infl_dt[,approx_infl := (1+recent_infl/12)^3/(1+future_infl/12)^3]
+ggplot(approx_infl_dt,aes(x=recent_infl,y=future_infl,size=approx_infl,color=approx_infl)) + geom_point()
+approx_infl_dt[,max(1-approx_infl)]
+approx_infl_dt[,min(1-approx_infl)]
+```
+Thus, the **maximum approximation for a difference of 10% in the inflation is 2.5%**. The approximation chosen in the book indeed makes sense.

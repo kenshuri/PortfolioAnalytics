@@ -1,0 +1,73 @@
+---
+title: "3. A Useful Approximation"
+author: "Alexis Sciau"
+date: "06/04/2020"
+output:
+  html_document:
+    code_folding: hide
+    df_print: kable
+    theme: default
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading libraries, echo=TRUE, message=FALSE}
+library(data.table)
+library(lubridate)
+library(ggplot2)
+library(pracma)
+theme_set(theme_minimal())
+```
+
+## 3.2 The Taylor Series
+In this section, we will illustrate the extra-precision given by adding subsequent term of the Taylor Series to approximate a function. We use the same function as in the book, being f(x) = 5 + 4 * x + 6 * x^2 + 7* x^3 + 15 * ln(x) - 20 * sin(x).
+
+
+First, we take the liberty to grab some experience on the the ggplot2 package! To begin with, we plot the function and its analytical derivatives for values from 0.01 to 5.
+
+```{r example_taylor, warning=FALSE}
+f <- expression(5 + 4 * x + 6 * x^2 + 7*x^3 + 15 * log(x) - 20 * sin(x))
+x <- seq(0.01,5,0.001)
+fx <- eval(f)
+dt <- data.table(x,fx)
+ggplot(dt,aes(x=x,y=fx)) + geom_line()
+df <- D(f,"x")
+ddf <- D(df,"x")
+dddf <- D(ddf,"x")
+ddddf <- D(dddf,"x")
+dddddf <- D(ddddf,"x")
+dt[,dfx:= eval(df)][,ddfx:=eval(ddf)][,dddfx:=eval(dddf)][,ddddfx:=eval(ddddf)][,dddddfx:=eval(dddddf)]
+# There are 2 techiques in order to plot several lines on the same  plot using ggplot2 : https://www.datanovia.com/en/blog/how-to-create-a-ggplot-with-multiple-lines/
+# The first technique uses sevral calls to geom_line
+ggplot(dt,aes(x=x)) + geom_line(aes(y=fx), color="darkred") + geom_line(aes(y=eval(df)),color="steelblue")
+ggplot(dt,aes(x=x)) + geom_line(aes(y=fx), color="darkred") + geom_line(aes(y=eval(df)),color="steelblue")+ geom_line(aes(y=eval(ddf)),color="black") + scale_y_continuous(limits = c(-1000,1000))
+ggplot(dt,aes(x=x)) + geom_line(aes(y=fx), color="darkred") + geom_line(aes(y=eval(df)),color="steelblue")+ geom_line(aes(y=eval(ddf)),color="black") + geom_line(aes(y=eval(dddf)),color="black") + scale_y_continuous(limits = c(-1000,1000))
+ggplot(dt,aes(x=x)) + geom_line(aes(y=fx), color="darkred") + geom_line(aes(y=eval(df)),color="steelblue")+ geom_line(aes(y=eval(ddf)),color="black") + geom_line(aes(y=eval(dddf)),color="black") + geom_line(aes(y=eval(ddddf)),color="black")+ scale_y_continuous(limits = c(-1000,1000))
+ggplot(dt,aes(x=x)) + geom_line(aes(y=fx), color="darkred") + geom_line(aes(y=eval(df)),color="steelblue")+ geom_line(aes(y=eval(ddf)),color="black") + geom_line(aes(y=eval(dddf)),color="black") + geom_line(aes(y=eval(ddddf)),color="black") + geom_line(aes(y=eval(dddddf)),color="black")+ scale_y_continuous(limits = c(-1000,1000))
+# The second technique needs one to tidy the data a bit before being used
+dt2 <- melt(dt, id="x",measure = c("fx","dfx","ddfx","dddfx","ddddfx","dddddfx"))
+ggplot(dt2,aes(x=x,y=value)) + geom_line(aes(color=variable, linetype = variable)) + scale_y_continuous(limits = c(-1000,1000))
+```
+
+Then, we try to reproduce the figure 3.1 in p53. We take x0 = 3.
+
+```{r taylor_approx_example}
+val_a <- dt[x==3,.(fx,dfx,ddfx,dddfx,ddddfx,dddddfx)]
+t0_3 <- expression(val_a[,fx])
+t1_3 <- expression(eval(t0_3) + 1/fact(1) * val_a[,dfx]*(x-3))
+t2_3 <- expression(eval(t1_3) + 1/fact(2) * val_a[,ddfx]*(x-3)^2)
+t3_3 <- expression(eval(t2_3) + 1/fact(3) * val_a[,dddfx]*(x-3)^3)
+t4_3 <- expression(eval(t3_3) + 1/fact(4) * val_a[,ddddfx]*(x-3)^4)
+t5_3 <- expression(eval(t4_3) + 1/fact(5) * val_a[,dddddfx]*(x-3)^5)
+dt_taylor <- dt[,.(x,fx)]
+dt_taylor[,t0:=eval(t0_3)][,t1:=eval(t1_3)][,t2:=eval(t2_3)][,t3:=eval(t3_3)][,t4:=eval(t4_3)][,t5:=eval(t5_3)]
+dt_taylor2 <- melt(dt_taylor,id="x",measure = c("fx","t0","t1","t2","t3","t4","t5"))
+ggplot(dt_taylor2,aes(x=x,y=value)) + geom_line(aes(linetype=variable, color=variable))
+```
+The story behind this plot is that the more elements are added to the Taylor series, the more precisely it apporximates the real function.
