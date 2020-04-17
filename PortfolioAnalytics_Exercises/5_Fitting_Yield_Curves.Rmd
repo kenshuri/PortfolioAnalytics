@@ -17,18 +17,20 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r loading libraries, echo=TRUE, message=FALSE}
+```{r loading libraries, echo=TRUE, message=FALSE, warning=FALSE}
 library(data.table)
 library(lubridate)
 library(ggplot2)
 library(pracma)
+library(fasttime)
+library(xts)
 theme_set(theme_minimal())
 ```
 
 ## 5.1 Getting started
-Though we do not have access to the same data as the book, ie a collection of US Treasury bond yields as at 29 May 2009, we retrieve from the [US treasury website](https://www.google.com "Daily Treasury Yield Curve Rates  from US Treasury") the daily treasury yield curve rates. Plotting this curve, we expect to get something close to the fig 5.2.
+Though we do not have access to the same data as the book, ie a collection of US Treasury bond yields as at 29 May 2009, we retrieve from the [US treasury website](https://www.treasury.gov/resource-center/data-chart-center/interest-rates/Pages/TextView.aspx?data=yield "Daily Treasury Yield Curve Rates  from US Treasury") the daily treasury yield curve rates. Plotting this curve, we expect to get something close to the fig 5.2.
 
-```{r US_yield_curve_example}
+```{r US_yield_curve_example, message=FALSE, warning=FALSE}
 yc_dt <- fread("../data/data_YC_US")
 yc_dt[,index:=fastPOSIXct(index)]
 yc_dt[,index:=as.Date(index)]
@@ -37,10 +39,73 @@ yc_xts <- as.xts(yc_dt)
 tenors <- c(1/12,2/12,3/12,6/12,1,2,3,5,7,10,20,30)
 colnames(yc_xts)<-tenors
 
-
 rates <- yc_xts["20090528/20090603"]
 
 daily_data <- as.data.table(melt(as.data.table(rates), measure.vars = colnames(rates)))
 daily_data[,index_f := as.factor(index)]
-ggplot(daily_data,aes(x=variable,y=value,color=index_f,group=index_f)) +geom_point()+ geom_line()
+daily_data[,tenors := as.numeric(as.character(variable))]
+ggplot(daily_data,aes(x=tenors,y=value,color=index_f,group=index_f))+ scale_x_continuous(name="Tenors", limits=c(0, 30)) + geom_point() + geom_smooth(se=FALSE)
 ```
+
+## 5.2 Yield Curves 101
+
+### 5.2.1 Pure-Discount Bond Prices
+We note that, in this paragraph, the author take the assumption that the interest rate can't be less than zero :
+
+> "Some relection reveals that the price should not exceed $1. Paying more than the future value essentially implies a negative interest rate [...]"
+
+This fairly logical assumption does not hold today!
+
+### 5.2.2 Spot Rates
+We will illustrate the correspondace between pure-discount bond prices and spot rates.
+```{r Discount prices and spot rates}
+long_names <- c("Maturity","Time to maturity","Pure-Discount Bond Price","Return","Rate","Simply compounded spot rates","Continuously compounded spot rates")
+short_names <- c("mat","time_to_mat","disc_f","return","rate","spot_sc","spot_cc")
+dt_rates <- as.data.table(as.Date(c("2020-04-30","2020-06-30","2020-12-31","2021-12-31","2025-12-31")))
+dt_rates[,time_to_mat:=V1-as.Date("2020-04-17")]
+dt_rates[,disc_f:=c(0.9995,0.997,0.985,0.95,0.82)]
+dt_rates[,return := 1/disc_f]
+dt_rates[,rate:=(return -1)*100]
+dt_rates[,spot_sc:=(return^(365/as.numeric(time_to_mat))-1)*100]
+dt_rates[,spot_cc:=(-log(disc_f)/(as.numeric(time_to_mat)/365))*100]
+colnames(dt_rates)<-long_names
+dt_rates
+dt_rates_plot <- melt(dt_rates,id = 2,measure=c(6,7))
+colnames(dt_rates_plot)<-c("time_to_mat","Rates","value")
+ggplot(dt_rates_plot,aes(x=time_to_mat,y=value,color=Rates)) + geom_point() + geom_line() + scale_x_continuous(name="Time to maturity (days)") + scale_y_continuous(name="Rate (%)")
+```
+
+The above graph illustrates the impact of the time to maturity on the difference between simply compounded and continuously compounded rates.
+
+### 5.2.3 Par Yields
+Let's now compute the par-yields for the set of bonds used just before.
+```{r par_yields}
+colnames(dt_rates)<-short_names
+dt_rates[,df_cumsum:=cumsum(disc_f)]
+dt_rates[,par_yield:=(1-disc_f)/df_cumsum*100]
+```
+
+### 5.2.5 Bringing it all together
+Let's suppose the rates given by the US treasury are spot rates, ie zero-coupon bond rates. We will therefor try to plot the subsequent par-yield and implied-forward artes curves. Also, to ease-up the work, we will not consider tenors under 1 year. Finally, we do simple linear interpolation to complete the zero-bond curve every year.
+```{r all_together, warning=FALSE}
+all_rates <- as.data.table(yc_xts["20090529"])
+all_rates <- melt(all_rates,id=1,measure=6:13)
+all_rates[,tenors:=as.numeric(as.character(variable))]
+all_rates[,spot_rates:=value]
+all_rates[,c("index"):=NULL][,c("variable"):=NULL][,c("value"):=NULL]
+all_tenors <- data.table(tenors=1:30)
+all_rates <- merge(all_rates,all_tenors,all=TRUE)
+all_rates <- as.data.table(na.approx(all_rates))
+all_rates[,disc_f:=1/(1+spot_rates/100)^tenors]
+all_rates[,df_cumsum := cumsum(disc_f)]
+all_rates[,par_yield:=((1-disc_f)/df_cumsum)*100]
+all_rates[,disc_f_30:=all_rates[tenors==30,disc_f]]
+all_rates[,T_minus_s:=30-tenors]
+all_rates[,forward_rates_mat_30:=((disc_f/disc_f_30)^(1/T_minus_s)-1)*100]
+all_rates[,df_shift:=shift(disc_f,1,type="lead")]
+all_rates[,forward_rates_1y:=(disc_f/df_shift-1)*100]
+all_rates_plot<-melt(all_rates,id="tenors",measure=c("spot_rates","par_yield","forward_rates_mat_30","forward_rates_1y"))
+ggplot(all_rates_plot,aes(x=tenors,y=value,color=variable)) + geom_point() + geom_line()
+ggplot(all_rates,aes(x=tenors,y=disc_f))+ geom_point() + geom_line()
+```
+## 5.3 Curve Fitting
