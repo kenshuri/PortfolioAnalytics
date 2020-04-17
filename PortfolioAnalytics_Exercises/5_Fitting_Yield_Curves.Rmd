@@ -26,7 +26,7 @@ theme_set(theme_minimal())
 ```
 
 ## 5.1 Getting started
-Though we do not have access to the same data as the book, ie a collection of US Treasury bond yields as at 29 May 2009, we retrive from the [US treasury website](https://www.google.com "Daily Treasury Yield Curve Rates  from US Treasury") the daily treasury yield curve rates. Plotting this curve, we expect to get something close to the fig 5.2.
+Though we do not have access to the same data as the book, ie a collection of US Treasury bond yields as at 29 May 2009, we retrieve from the [US treasury website](https://www.google.com "Daily Treasury Yield Curve Rates  from US Treasury") the daily treasury yield curve rates. Plotting this curve, we expect to get something close to the fig 5.2.
 
 ```{r US_yield_curve_example}
 yc_dt <- fread("../data/data_YC_US")
