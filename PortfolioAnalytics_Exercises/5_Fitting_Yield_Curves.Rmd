@@ -52,12 +52,12 @@ ggplot(daily_data,aes(x=tenors,y=value,color=index_f,group=index_f))+ scale_x_co
 ### 5.2.1 Pure-Discount Bond Prices
 We note that, in this paragraph, the author take the assumption that the interest rate can't be less than zero :
 
-> "Some relection reveals that the price should not exceed $1. Paying more than the future value essentially implies a negative interest rate [...]"
+> "Some reflection reveals that the price should not exceed $1. Paying more than the future value essentially implies a negative interest rate [...]"
 
 This fairly logical assumption does not hold today!
 
 ### 5.2.2 Spot Rates
-We will illustrate the correspondace between pure-discount bond prices and spot rates.
+We will illustrate the correspondance between pure-discount bond prices and spot rates. We start this exercise choosing arbitrary prices for Pure-Discount bonds.
 ```{r Discount prices and spot rates}
 long_names <- c("Maturity","Time to maturity","Pure-Discount Bond Price","Return","Rate","Simply compounded spot rates","Continuously compounded spot rates")
 short_names <- c("mat","time_to_mat","disc_f","return","rate","spot_sc","spot_cc")
@@ -108,4 +108,40 @@ all_rates_plot<-melt(all_rates,id="tenors",measure=c("spot_rates","par_yield","f
 ggplot(all_rates_plot,aes(x=tenors,y=value,color=variable)) + geom_point() + geom_line()
 ggplot(all_rates,aes(x=tenors,y=disc_f))+ geom_point() + geom_line()
 ```
+
+
 ## 5.3 Curve Fitting
+
+### 5.3.1 The Classic Approach
+In this approach, several functions are taken as example to represent the four core consitutuents of the yield curve. We will go through the examples chosen in the book.s
+
+#### Discount factors as negative exponential
+The first example is to choose the negative exponential to represent the discount factors.
+
+```{r negative_exp_df}
+disc_f <- function(t,a=0.03,x=0){
+  exp(-a*(t-x))
+}
+ex1_dt <- data.table(t=seq(0,30,0.1))
+ex1_dt[,disc_factors_1 := disc_f(t,0.01)]
+ex1_dt[,disc_factors_2 := disc_f(t,0.02)]
+ex1_dt[,disc_factors_3 := disc_f(t,0.03)]
+ex1_dt[,disc_factors_4 := disc_f(t,0.04)]
+ex1_dt[,disc_factors_5 := disc_f(t,0.05)]
+ex1_dt[,disc_factors_6 := disc_f(t,0.06)]
+ex1_dt[,disc_factors_7 := disc_f(t,0.07)]
+ex1_dt[,zero_coupon_1 := -log(disc_factors_1)/t*100]
+ex1_dt[,zero_coupon_2 := -log(disc_factors_2)/t*100]
+ex1_dt[,zero_coupon_3 := -log(disc_factors_3)/t*100]
+ex1_dt[,zero_coupon_4 := -log(disc_factors_4)/t*100]
+ex1_dt[,zero_coupon_5 := -log(disc_factors_5)/t*100]
+ex1_dt[,zero_coupon_6 := -log(disc_factors_6)/t*100]
+ex1_dt[,zero_coupon_7 := -log(disc_factors_7)/t*100]
+ex1_dt_df_plot <- melt(ex1_dt,id="t",measure = c(2:8))
+ex1_dt_zc_plot <- melt(ex1_dt,id="t",measure = c(9:15))
+ggplot(ex1_dt_df_plot,aes(x=t,y=value,color=variable)) + geom_line()
+ggplot(ex1_dt_zc_plot,aes(x=t,y=value,color=variable)) + geom_line() + scale_y_continuous(limits = c(0,10))
+```
+
+Numerically, we found back what is outlined in the book : using a negative exponential for representing discount factors leads to a flat zero coupon curve, equals to the parameter used in the negative exponential.
+
