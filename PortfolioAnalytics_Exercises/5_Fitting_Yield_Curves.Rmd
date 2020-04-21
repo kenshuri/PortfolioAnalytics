@@ -229,3 +229,78 @@ fig_5_11[,tenor:=as.numeric(as.character(tenor))]
 fig_5_11[,toy_model:=rep.int(prices_optim_all[sum_norm_diff == min(sum_norm_diff),a][1],.N)]
 ggplot(fig_5_11, aes(x=tenor)) + geom_point(aes(y=par_rate)) + geom_line(aes(y=toy_model)) + scale_y_continuous(name = "Per cent") 
 ```
+
+Now that we manage to fit our toy model, we are going to fit a more complex Nelson-Siegel Model to our rates. First, we wil do so using an existing package : YieldCurve
+
+```{r fitting_NS}
+rates <- yc_xts["20090529"][,-c(2)]
+matu <- as.numeric(colnames(rates))
+NSParameters <- Nelson.Siegel(rate = rates, maturity = matu)
+y <- NSrates(NSParameters[1,], matu)
+plot(matu,rates,main="Fitting Nelson-Siegel yield curve",
+  xlab=c("Pillars"), type="o")
+lines(matu,y, col=2)
+legend("topleft",legend=c("observed yield curve","fitted yield curve"),
+col=c(1,2),lty=1)
+grid()
+```
+
+We will now try to fit the model ourselves.
+```{r fitting_NS_man}
+NS_fit <- as.data.table(yc_xts["20090529"])
+
+NS_fit <- melt(NS_fit,id=1,measure = c(2,4:13))
+
+a_0 <- data.table(a_0=seq(-5,5,0.5))
+a_0[,index:=rep(as.Date("2009-05-29"),.N)]
+
+a_1 <- data.table(a_1=seq(-5,5,0.5))
+a_1[,index:=rep(as.Date("2009-05-29"),.N)]
+
+a_2 <- data.table(a_2=seq(-5,5,0.5))
+a_2[,index:=rep(as.Date("2009-05-29"),.N)]
+
+lambda <- data.table(lambda=seq(0.1,1,0.05))
+lambda[,index:=rep(as.Date("2009-05-29"),.N)]
+
+NS_fit <- merge(NS_fit,a_0,allow.cartesian = TRUE)
+NS_fit <- merge(NS_fit,a_1,allow.cartesian = TRUE)
+NS_fit <- merge(NS_fit,a_2,allow.cartesian = TRUE)
+NS_fit <- merge(NS_fit,lambda,allow.cartesian = TRUE)
+
+price_NS <- function(t,y,a_0,a_1,a_2,lambda){
+  price <- 0
+  if (t<=1) {
+    price <- (1+y/100)/(1+(a_0+a_1*(1-exp(-lambda*t))/(lambda*t)+a_2*((1-exp(-lambda*t))/(lambda*t)-exp(-lambda*t)))/100)^(t)
+  } else {
+    for (i in 1:t){
+      price <- price + (y/100)/(1+(a_0+a_1*(1-exp(-lambda*t))/(lambda*t)+a_2*((1-exp(-lambda*t))/(lambda*t)-exp(-lambda*t)))/100)^(i)
+    }
+    price <- price + 1/(1+(a_0+a_1*(1-exp(-lambda*t))/(lambda*t)+a_2*((1-exp(-lambda*t))/(lambda*t)-exp(-lambda*t)))/100)^(t)
+  }
+  return(price)
+}
+
+NS_fit[,c("index"):=NULL]
+colnames(NS_fit) <- c("tenor","par_rate","a_0","a_1","a_2","lambda")
+NS_fit[,tenor:=as.numeric(as.character(tenor))]
+NS_fit[,price := mapply(price_NS,NS_fit[,tenor],NS_fit[,par_rate],NS_fit[,a_0],NS_fit[,a_1],NS_fit[,a_2],NS_fit[,lambda])]
+NS_fit[,norm_diff:= (price-1)^2]
+NS_fit[,sum_norm_diff := sum(norm_diff),by=.(a_0,a_1,a_2,lambda)]
+paramNS <- NS_fit[sum_norm_diff == min(sum_norm_diff),.(a_0,a_1,a_2,lambda)][1]
+
+
+z <- function(t,a_0,a_1,a_2,lambda){
+  a_0+a_1*(1-exp(-lambda*t))/(lambda*t)+a_2*((1-exp(-lambda*t))/(lambda*t)-exp(-lambda*t))
+}
+
+fig_5_13 <- as.data.table(yc_xts["20090529"])
+fig_5_13 <- melt(fig_5_13,id=1,measure = c(2,4:13))
+fig_5_13[,index:=NULL]
+colnames(fig_5_13) <- c("tenor","par_rate")
+fig_5_13[,tenor:=as.numeric(as.character(tenor))]
+fig_5_13[,NS_model:=z(tenor,paramNS[1,a_0][1],paramNS[1,a_1][1],paramNS[1,a_2][1],paramNS[1,lambda][1])]
+fig_5_13_plot <- melt(fig_5_13,id="tenor")
+ggplot(fig_5_13_plot,aes(x=tenor,y=value,color=variable)) + geom_line()
+```
+
