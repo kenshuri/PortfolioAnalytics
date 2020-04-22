@@ -1,0 +1,49 @@
+---
+title: "Helpful R tricks"
+author: "Alexis Sciau"
+date: "17 avril 2020"
+output:
+  html_document:
+    code_folding: hide
+    df_print: kable
+    theme: default
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading libraries, echo=TRUE, message=FALSE, warning=FALSE}
+library(data.table)
+library(lubridate)
+library(ggplot2)
+library(pracma)
+library(fasttime)
+library(xts)
+theme_set(theme_minimal())
+```
+
+## data.table
+
+### Transform factor column into numeric column
+```{r US_yield_curve_example}
+yc_dt <- fread("./data/data_YC_US")
+yc_dt[,index:=fastPOSIXct(index)]
+yc_dt[,index:=as.Date(index)]
+yc_xts <- as.xts(yc_dt)
+
+tenors <- c(1/12,2/12,3/12,6/12,1,2,3,5,7,10,20,30)
+colnames(yc_xts)<-tenors
+
+rates <- yc_xts["20090528/20090603"]
+
+daily_data <- as.data.table(melt(as.data.table(rates), measure.vars = colnames(rates)))
+daily_data[,index_f := as.factor(index)]
+# This is where it happens
+daily_data[,tenors := as.numeric(as.character(variable))]
+ggplot(daily_data,aes(x=tenors,y=value,color=index_f,group=index_f))+ scale_x_continuous(name="Tenors", limits=c(0, 30)) + geom_point()+ geom_line()
+```

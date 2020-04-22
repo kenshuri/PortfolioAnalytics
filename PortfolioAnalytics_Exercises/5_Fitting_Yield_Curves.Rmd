@@ -145,3 +145,162 @@ ggplot(ex1_dt_zc_plot,aes(x=t,y=value,color=variable)) + geom_line() + scale_y_c
 
 Numerically, we found back what is outlined in the book : using a negative exponential for representing discount factors leads to a flat zero coupon curve, equals to the parameter used in the negative exponential.
 
+Finally, we are going to find the best choice for the parameter a, given the negative exponential form of the discount factors. We thus need to solve the optimisation problem outlined in the book.
+
+Solving this problem using the R in-built optimisation functions requires one to express it in a matrix format. For now on, we will not dive into oprimisation problems. We will solve this problem numerically, for bonds with tenors <= 1, so that the annualy-compounded price function is straight-forward to write. 
+
+```{r best_param_a}
+prices_optim <- as.data.table(yc_xts["20090529"])
+
+prices_optim_less_than_1 <- melt(prices_optim,id=1,measure = c(2,4:6))
+a <- data.table(a=seq(0,2,0.0001))
+a[,index:=rep(as.Date("2009-05-29"),.N)]
+prices_optim_less_than_1 <- merge(prices_optim_less_than_1,a,allow.cartesian = TRUE)
+prices_optim_less_than_1[,c("index"):=NULL]
+colnames(prices_optim_less_than_1) <- c("tenor","par_rate","a")
+prices_optim_less_than_1[,tenor:=as.numeric(as.character(tenor))]
+prices_optim_less_than_1[,price := (1+par_rate/100)/(1+a/100)^(tenor)]
+prices_optim_less_than_1[,norm_diff:= (price-1)^2]
+prices_optim_less_than_1[,sum_norm_diff := sum(norm_diff),by=a]
+ggplot(prices_optim_less_than_1,aes(x=a,y=sum_norm_diff))+geom_line()
+prices_optim_less_than_1[sum_norm_diff == min(sum_norm_diff),a][1]
+```
+
+Numerically, we find that the best parameter for a is 0,5055. This is consistent with the result found in Excel.
+
+We know can try to solve the same problema with coutinous compounding limiting ourselves to the same tenors.
+
+```{r best_param_a_continous}
+prices_optim_less_than_1_continuous <- melt(prices_optim,id=1,measure = c(2,4:6))
+a <- data.table(a=seq(0,2,0.0001))
+a[,index:=rep(as.Date("2009-05-29"),.N)]
+prices_optim_less_than_1_continuous <- merge(prices_optim_less_than_1_continuous,a,allow.cartesian = TRUE)
+prices_optim_less_than_1_continuous[,c("index"):=NULL]
+colnames(prices_optim_less_than_1_continuous) <- c("tenor","par_rate","a")
+prices_optim_less_than_1_continuous[,tenor:=as.numeric(as.character(tenor))]
+prices_optim_less_than_1_continuous[,price := (1+par_rate/100)*exp(-a/100*tenor)]
+prices_optim_less_than_1_continuous[,norm_diff:= (price-1)^2]
+prices_optim_less_than_1_continuous[,sum_norm_diff := sum(norm_diff),by=a]
+ggplot(prices_optim_less_than_1_continuous,aes(x=a,y=sum_norm_diff))+geom_line()
+prices_optim_less_than_1_continuous[sum_norm_diff == min(sum_norm_diff),a][1]
+```
+
+The value of the parameter a is quite close using the continuously compounded formula.
+
+We will now try to find the good parameter a for all taking into account all tenors. To do so, we will write function for the price of the bond.
+
+```{r test}
+price_sc <- function(t,y,z){
+  price <- 0
+  if (t<=1) {
+    price <- (1+y/100)/(1+z/100)^(t)
+  } else {
+    for (i in 1:t){
+      price <- price + (y/100)/(1+z/100)^(i)
+    }
+    price <- price + 1/(1+z/100)^(t)
+  }
+  return(price)
+}
+prices_optim <- as.data.table(yc_xts["20090529"])
+
+prices_optim_all <- melt(prices_optim,id=1,measure = c(2,4:13))
+a <- data.table(a=seq(0,10,0.01))
+a[,index:=rep(as.Date("2009-05-29"),.N)]
+prices_optim_all <- merge(prices_optim_all,a,allow.cartesian = TRUE)
+prices_optim_all[,c("index"):=NULL]
+colnames(prices_optim_all) <- c("tenor","par_rate","a")
+prices_optim_all[,tenor:=as.numeric(as.character(tenor))]
+prices_optim_all[,price := mapply(price_sc,prices_optim_all[,tenor],prices_optim_all[,par_rate],prices_optim_all[,a])]
+prices_optim_all[,norm_diff:= (price-1)^2]
+prices_optim_all[,sum_norm_diff := sum(norm_diff),by=a]
+ggplot(prices_optim_all,aes(x=a,y=sum_norm_diff))+geom_line()
+prices_optim_all[sum_norm_diff == min(sum_norm_diff),a][1]
+
+```
+
+Finally, we can plot the par yield point against our toy model and get a figure that looks like fig 5.11.
+```{r fig_5_11}
+fig_5_11 <- as.data.table(yc_xts["20090529"])
+fig_5_11 <- melt(fig_5_11,id=1,measure = c(2,4:13))
+fig_5_11[,index:=NULL]
+colnames(fig_5_11) <- c("tenor","par_rate")
+fig_5_11[,tenor:=as.numeric(as.character(tenor))]
+fig_5_11[,toy_model:=rep.int(prices_optim_all[sum_norm_diff == min(sum_norm_diff),a][1],.N)]
+ggplot(fig_5_11, aes(x=tenor)) + geom_point(aes(y=par_rate)) + geom_line(aes(y=toy_model)) + scale_y_continuous(name = "Per cent") 
+```
+
+Now that we manage to fit our toy model, we are going to fit a more complex Nelson-Siegel Model to our rates. First, we wil do so using an existing package : YieldCurve
+
+```{r fitting_NS}
+rates <- yc_xts["20090529"][,-c(2)]
+matu <- as.numeric(colnames(rates))
+NSParameters <- Nelson.Siegel(rate = rates, maturity = matu)
+y <- NSrates(NSParameters[1,], matu)
+plot(matu,rates,main="Fitting Nelson-Siegel yield curve",
+  xlab=c("Pillars"), type="o")
+lines(matu,y, col=2)
+legend("topleft",legend=c("observed yield curve","fitted yield curve"),
+col=c(1,2),lty=1)
+grid()
+```
+
+We will now try to fit the model ourselves.
+```{r fitting_NS_man}
+NS_fit <- as.data.table(yc_xts["20090529"])
+
+NS_fit <- melt(NS_fit,id=1,measure = c(2,4:13))
+
+a_0 <- data.table(a_0=seq(-5,5,0.5))
+a_0[,index:=rep(as.Date("2009-05-29"),.N)]
+
+a_1 <- data.table(a_1=seq(-5,5,0.5))
+a_1[,index:=rep(as.Date("2009-05-29"),.N)]
+
+a_2 <- data.table(a_2=seq(-5,5,0.5))
+a_2[,index:=rep(as.Date("2009-05-29"),.N)]
+
+lambda <- data.table(lambda=seq(0.1,1,0.05))
+lambda[,index:=rep(as.Date("2009-05-29"),.N)]
+
+NS_fit <- merge(NS_fit,a_0,allow.cartesian = TRUE)
+NS_fit <- merge(NS_fit,a_1,allow.cartesian = TRUE)
+NS_fit <- merge(NS_fit,a_2,allow.cartesian = TRUE)
+NS_fit <- merge(NS_fit,lambda,allow.cartesian = TRUE)
+
+price_NS <- function(t,y,a_0,a_1,a_2,lambda){
+  price <- 0
+  if (t<=1) {
+    price <- (1+y/100)/(1+(a_0+a_1*(1-exp(-lambda*t))/(lambda*t)+a_2*((1-exp(-lambda*t))/(lambda*t)-exp(-lambda*t)))/100)^(t)
+  } else {
+    for (i in 1:t){
+      price <- price + (y/100)/(1+(a_0+a_1*(1-exp(-lambda*t))/(lambda*t)+a_2*((1-exp(-lambda*t))/(lambda*t)-exp(-lambda*t)))/100)^(i)
+    }
+    price <- price + 1/(1+(a_0+a_1*(1-exp(-lambda*t))/(lambda*t)+a_2*((1-exp(-lambda*t))/(lambda*t)-exp(-lambda*t)))/100)^(t)
+  }
+  return(price)
+}
+
+NS_fit[,c("index"):=NULL]
+colnames(NS_fit) <- c("tenor","par_rate","a_0","a_1","a_2","lambda")
+NS_fit[,tenor:=as.numeric(as.character(tenor))]
+NS_fit[,price := mapply(price_NS,NS_fit[,tenor],NS_fit[,par_rate],NS_fit[,a_0],NS_fit[,a_1],NS_fit[,a_2],NS_fit[,lambda])]
+NS_fit[,norm_diff:= (price-1)^2]
+NS_fit[,sum_norm_diff := sum(norm_diff),by=.(a_0,a_1,a_2,lambda)]
+paramNS <- NS_fit[sum_norm_diff == min(sum_norm_diff),.(a_0,a_1,a_2,lambda)][1]
+
+
+z <- function(t,a_0,a_1,a_2,lambda){
+  a_0+a_1*(1-exp(-lambda*t))/(lambda*t)+a_2*((1-exp(-lambda*t))/(lambda*t)-exp(-lambda*t))
+}
+
+fig_5_13 <- as.data.table(yc_xts["20090529"])
+fig_5_13 <- melt(fig_5_13,id=1,measure = c(2,4:13))
+fig_5_13[,index:=NULL]
+colnames(fig_5_13) <- c("tenor","par_rate")
+fig_5_13[,tenor:=as.numeric(as.character(tenor))]
+fig_5_13[,NS_model:=z(tenor,paramNS[1,a_0][1],paramNS[1,a_1][1],paramNS[1,a_2][1],paramNS[1,lambda][1])]
+fig_5_13_plot <- melt(fig_5_13,id="tenor")
+ggplot(fig_5_13_plot,aes(x=tenor,y=value,color=variable)) + geom_line()
+```
+
