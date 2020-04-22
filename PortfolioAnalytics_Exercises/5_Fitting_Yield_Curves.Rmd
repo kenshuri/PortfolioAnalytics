@@ -9,6 +9,7 @@ output:
     theme: default
     toc: yes
     toc_float: yes
+    toc_depth: 4 
   pdf_document:
     toc: yes
 ---
@@ -24,6 +25,7 @@ library(ggplot2)
 library(pracma)
 library(fasttime)
 library(xts)
+library(YieldCurve)
 theme_set(theme_minimal())
 ```
 
@@ -115,7 +117,7 @@ ggplot(all_rates,aes(x=tenors,y=disc_f))+ geom_point() + geom_line()
 ### 5.3.1 The Classic Approach
 In this approach, several functions are taken as example to represent the four core consitutuents of the yield curve. We will go through the examples chosen in the book.s
 
-#### Discount factors as negative exponential
+#### 5.3.1.1 Discount factors as negative exponential
 The first example is to choose the negative exponential to represent the discount factors.
 
 ```{r negative_exp_df}
@@ -187,9 +189,9 @@ prices_optim_less_than_1_continuous[sum_norm_diff == min(sum_norm_diff),a][1]
 
 The value of the parameter a is quite close using the continuously compounded formula.
 
-We will now try to find the good parameter a for all taking into account all tenors. To do so, we will write function for the price of the bond.
+We will now try to find the good parameter a for taking into account all tenors. To do so, we will write function for the price of the bond.
 
-```{r test}
+```{r best_parameter_a_all_tenors}
 price_sc <- function(t,y,z){
   price <- 0
   if (t<=1) {
@@ -229,6 +231,8 @@ fig_5_11[,tenor:=as.numeric(as.character(tenor))]
 fig_5_11[,toy_model:=rep.int(prices_optim_all[sum_norm_diff == min(sum_norm_diff),a][1],.N)]
 ggplot(fig_5_11, aes(x=tenor)) + geom_point(aes(y=par_rate)) + geom_line(aes(y=toy_model)) + scale_y_continuous(name = "Per cent") 
 ```
+
+#### 5.3.1.2 Nelson-Siegel Model
 
 Now that we manage to fit our toy model, we are going to fit a more complex Nelson-Siegel Model to our rates. First, we wil do so using an existing package : YieldCurve
 
@@ -303,4 +307,6 @@ fig_5_13[,NS_model:=z(tenor,paramNS[1,a_0][1],paramNS[1,a_1][1],paramNS[1,a_2][1
 fig_5_13_plot <- melt(fig_5_13,id="tenor")
 ggplot(fig_5_13_plot,aes(x=tenor,y=value,color=variable)) + geom_line()
 ```
+
+The result is quite close !
 

@@ -1,0 +1,79 @@
+---
+title: "zoo Vs data.table"
+author: "Alexis Sciau"
+date: "22/04/2020"
+output:
+  html_document:
+    code_folding: hide
+    df_print: kable
+    theme: default
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading libraries, echo=TRUE, message=FALSE, warning=FALSE}
+library(xts)
+library(data.table)
+library(microbenchmark)
+library(fasttime)
+library(lubridate)
+library(ggplot2)
+library(pracma)
+theme_set(theme_minimal())
+```
+
+## Rationale
+
+Two different solutions were thought of as a way to store/read data, knowing the fact that we intend to use data formated as xts objects in the project. We therefore want to know which solution is the fastest to make a good choice.
+
+### Storing the data
+
+Using microbenchmark, we will compare data.table and zoo writing functions.
+
+```{r storing}
+yc_dt <- fread("../data/data_YC_US_speedtest")
+yc_dt[,Index:=fastPOSIXct(Index)]
+yc_dt[,Index:=as.Date(Index)]
+yc_xts <- as.xts(yc_dt)
+bench <- microbenchmark(data.table = fwrite(yc_dt,"temp1"),zoo = write.zoo(yc_xts,file="temp2"),times = 20)
+autoplot(bench)
+```
+
+When it comes to storing the data, **data.table is a much more efficient tool that zoo** write function.
+
+### Loading the data
+
+Using microbenchmark, we will compare data.table and zoo reading functions. Knowing that we need an xts object in the end, we will have to transform the data in an xts object.
+
+```{r loading}
+bench <- microbenchmark(
+  data.table = {
+    yc_dt <- fread("temp1")
+    yc_dt[,Index:=fastPOSIXct(Index)]
+    yc_dt[,Index:=as.Date(Index)]
+    yc_dt_xts <- as.xts(yc_dt)
+  },
+  
+  zoo = {
+    yc_zoo <- read.zoo("temp2",index.column = 1, header = TRUE)
+    yc_zoo_xts <- as.xts(yc_zoo)
+  },
+  
+  times = 50
+)
+autoplot(bench)
+
+identical(yc_dt_xts,yc_zoo_xts)
+```
+
+Again, **data.table is much more efficient than zoo**. Moreover, we made sure that the output xts objects are the same.
+
+## Conclusion
+
+We will use data.table to store/read data in the project!
