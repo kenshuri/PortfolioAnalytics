@@ -1,0 +1,87 @@
+---
+title: "Calling functions in data.table"
+author: "Alexis Sciau"
+date: "22 avril 2020"
+output:
+  html_document:
+    code_folding: hide
+    df_print: kable
+    theme: default
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading libraries, echo=TRUE, message=FALSE, warning=FALSE}
+library(data.table)
+library(lubridate)
+library(ggplot2)
+library(pracma)
+library(fasttime)
+library(xts)
+library(microbenchmark)
+theme_set(theme_minimal())
+```
+
+This file tests calling functions inside data.table objects. Reference to [Stack Overflow question](https://stackoverflow.com/questions/61344686/calling-user-defined-function-from-data-table-object/61345840?noredirect=1#comment108539582_61345840)
+
+## Functions without if and/or loop statements
+
+## Functions with loop statement
+Functions with loop statements can't be called in a straightforward way in the brackets of the data.table ocject. Let's illustrate this fact with an example.
+
+```{r example_bug_loop_1}
+test <-data.table(a=c(1,2,3),b=c(4,5,6))
+f_1 <- function(a,b){
+  out <-0
+  for (i in seq(1,a,1)){
+    out <- out + b^(i) 
+  }
+  return(out)
+}
+
+expected_result<-c(4, 30, 258)
+
+test[,f_1(a,b)]
+```
+
+```{r example_bug_loop_2}
+f_2 <- function(a,b){
+  out <-0
+  for (i in 1:a){
+    out <- out + b^(i) 
+  }
+  return(out)
+}
+
+test[,f_2(a,b)]
+```
+
+We understand from this simple tests that the function called in the data.table take as a parameter all the column a as a parameter, and not only the a on its row as expected. To solve this problem, to solutions are proposed. 
+
+```{r solution_loop}
+test[,c:=mapply(f_1, test[,a],test[,b])]
+
+test[,d:=f(a,b),1L:nrow(test)]
+```
+
+We know test their speed !
+```{r speed_test_loop}
+a<-1:500
+b<-500:1
+
+test_1 <- data.table(a,b)
+test_2 <- data.table(a,b)
+
+bench <- microbenchmark(v_1 = test_1[,c:=mapply(f_1,test_1[,a],test_1[,b])],
+                        v_2 = test_2[,c:=f_1(a,b),1L:nrow(test_2)],times=100L)
+autoplot(bench)
+bench
+```
+
+Both solutions are equivalent!
