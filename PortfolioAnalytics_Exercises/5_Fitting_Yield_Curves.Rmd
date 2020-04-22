@@ -112,10 +112,49 @@ ggplot(all_rates,aes(x=tenors,y=disc_f))+ geom_point() + geom_line()
 ```
 
 
+The hypothesis used before, being that imput rates are spot rates, is not satisfactory whene it comes to rate modelling. We want to use par rates as input for the observed price !
+
+Thus, we will do again the exercise in order to derive the spot rates from the par yields.
+
+```{r all_together_from_par_yields}
+all_rates <- as.data.table(yc_xts["20090529"])
+all_rates <- melt(all_rates,id=1,measure=c(2,4:13))
+all_rates[,tenor:=as.numeric(as.character(variable))]
+all_rates[,par_rate:=value]
+all_rates[,c("index"):=NULL][,c("variable"):=NULL][,c("value"):=NULL]
+all_tenors <- data.table(tenor=1:30)
+all_rates <- merge(all_rates,all_tenors,all=TRUE)
+all_rates <- as.data.table(na.approx(all_rates))
+
+all_rates[tenor<1,df:=1/(1+par_rate/100*tenor)]
+
+par2df <- function(y){
+  df <- rep.int(0,length(y))
+  df[1] <- 1/(1+y[1]/100)
+  for (i in 2:length(y)){
+    df[i] <- (1-(y[i]/100)*sum(df[1:(i-1)]))/(y[i]/100+1)
+  }
+  return(df)
+}
+
+all_rates[tenor>=1,df:=par2df(par_rate)]
+
+all_rates[,spot_rate:=((1/df)^(1/tenor)-1)*100]
+all_rates[,df_cumsum := cumsum(df)]
+all_rates[,disc_f_30:=all_rates[tenor==30,df]]
+all_rates[,T_minus_s:=30-tenor]
+all_rates[,forward_rates_mat_30:=((df/disc_f_30)^(1/T_minus_s)-1)*100]
+all_rates[,df_shift:=shift(df,1,type="lead")]
+all_rates[,forward_rates_1y:=(df/df_shift-1)*100]
+all_rates_plot<-melt(all_rates,id="tenor",measure=c("spot_rate","par_rate","forward_rates_mat_30","forward_rates_1y"))
+ggplot(all_rates_plot,aes(x=tenor,y=value,color=variable)) + geom_point() + geom_line()
+ggplot(all_rates,aes(x=tenor,y=df))+ geom_point() + geom_line()
+```
+
 ## 5.3 Curve Fitting
 
 ### 5.3.1 The Classic Approach
-In this approach, several functions are taken as example to represent the four core consitutuents of the yield curve. We will go through the examples chosen in the book.s
+In this approach, several functions are taken as example to represent the four core consituents of the yield curve. We will go through the examples chosen in the book.s
 
 #### 5.3.1.1 Discount factors as negative exponential
 The first example is to choose the negative exponential to represent the discount factors.
@@ -178,7 +217,7 @@ a <- data.table(a=seq(0,2,0.0001))
 a[,index:=rep(as.Date("2009-05-29"),.N)]
 prices_optim_less_than_1_continuous <- merge(prices_optim_less_than_1_continuous,a,allow.cartesian = TRUE)
 prices_optim_less_than_1_continuous[,c("index"):=NULL]
-colnames(prices_optim_less_than_1_continuous) <- c("tenor","par_rate","a")
+colnames(prices_optim_less_than_1_continuous) <- c("tenor","par_rate","a") 
 prices_optim_less_than_1_continuous[,tenor:=as.numeric(as.character(tenor))]
 prices_optim_less_than_1_continuous[,price := (1+par_rate/100)*exp(-a/100*tenor)]
 prices_optim_less_than_1_continuous[,norm_diff:= (price-1)^2]
@@ -195,7 +234,7 @@ We will now try to find the good parameter a for taking into account all tenors.
 price_sc <- function(t,y,z){
   price <- 0
   if (t<=1) {
-    price <- (1+y/100)/(1+z/100)^(t)
+    price <- (1+y/100)/(1+z/    100)^(t)
   } else {
     for (i in 1:t){
       price <- price + (y/100)/(1+z/100)^(i)
@@ -249,7 +288,7 @@ col=c(1,2),lty=1)
 grid()
 ```
 
-We will now try to fit the model ourselves.
+We will now try to fit the model ourselves. In this package, we used par
 ```{r fitting_NS_man}
 NS_fit <- as.data.table(yc_xts["20090529"])
 
@@ -310,3 +349,20 @@ ggplot(fig_5_13_plot,aes(x=tenor,y=value,color=variable)) + geom_line()
 
 The result is quite close !
 
+#### 5.3.1.3 Svensson Model
+The package *YieldCurve* used previously enables us to simply test the Svensson model. The svensson model extends the Nelson-Siegel models and enables the yield curve to take a second hump.
+
+```{r fitting_Svensson}
+rates <- yc_xts["20090529"][,-c(2)]
+matu <- as.numeric(colnames(rates))
+SParameters <- Svensson(rate = rates, maturity = matu)
+y <- Srates(SParameters[1,], matu,"Spot")
+plot(matu,rates,main="Fitting Svensson yield curve",
+  xlab=c("Pillars"), type="o")
+lines(matu,y, col=2)
+legend("topleft",legend=c("observed yield curve","fitted yield curve"),
+col=c(1,2),lty=1)
+grid()
+```
+
+It is noteworthy that the svensson model used here returns spot rates and not par-rates.
