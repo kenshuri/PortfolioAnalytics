@@ -87,7 +87,7 @@ dt_rates[,df_cumsum:=cumsum(disc_f)]
 dt_rates[,par_yield:=(1-disc_f)/df_cumsum*100]
 ```
 
-### 5.2.5 Bringing it all together
+### 5.2.5 Bringing it all together {#anchor_1}
 Let's suppose the rates given by the US treasury are spot rates, ie zero-coupon bond rates. We will therefor try to plot the subsequent par-yield and implied-forward artes curves. Also, to ease-up the work, we will not consider tenors under 1 year. Finally, we do simple linear interpolation to complete the zero-bond curve every year.
 ```{r all_together, warning=FALSE}
 all_rates <- as.data.table(yc_xts["20090529"])
@@ -107,8 +107,8 @@ all_rates[,forward_rates_mat_30:=((disc_f/disc_f_30)^(1/T_minus_s)-1)*100]
 all_rates[,df_shift:=shift(disc_f,1,type="lead")]
 all_rates[,forward_rates_1y:=(disc_f/df_shift-1)*100]
 all_rates_plot<-melt(all_rates,id="tenors",measure=c("spot_rates","par_yield","forward_rates_mat_30","forward_rates_1y"))
-ggplot(all_rates_plot,aes(x=tenors,y=value,color=variable)) + geom_point() + geom_line()
-ggplot(all_rates,aes(x=tenors,y=disc_f))+ geom_point() + geom_line()
+ggplot(all_rates_plot,aes(x=tenors,y=value,color=variable)) + geom_point()  + geom_smooth(se=FALSE)
+ggplot(all_rates,aes(x=tenors,y=disc_f))+ geom_point()+ geom_line()
 ```
 
 
@@ -147,7 +147,8 @@ all_rates[,forward_rates_mat_30:=((df/disc_f_30)^(1/T_minus_s)-1)*100]
 all_rates[,df_shift:=shift(df,1,type="lead")]
 all_rates[,forward_rates_1y:=(df/df_shift-1)*100]
 all_rates_plot<-melt(all_rates,id="tenor",measure=c("spot_rate","par_rate","forward_rates_mat_30","forward_rates_1y"))
-ggplot(all_rates_plot,aes(x=tenor,y=value,color=variable)) + geom_point() + geom_line()
+rates_20090529 <- all_rates[(tenor <=1) | (tenor %in% c(2,3,5,7,10,20,30)),.(tenor,spot_rate,par_rate)]
+ggplot(all_rates_plot,aes(x=tenor,y=value,color=variable)) + geom_point() + geom_smooth(se=FALSE)
 ggplot(all_rates,aes(x=tenor,y=df))+ geom_point() + geom_line()
 ```
 
@@ -283,12 +284,27 @@ y <- NSrates(NSParameters[1,], matu)
 plot(matu,rates,main="Fitting Nelson-Siegel yield curve",
   xlab=c("Pillars"), type="o")
 lines(matu,y, col=2)
-legend("topleft",legend=c("observed yield curve","fitted yield curve"),
+legend("topleft",legend=c("observed par yield curve","fitted yield curve"),
+col=c(1,2),lty=1)
+grid()
+
+r <- dcast(rates_20090529[,.(tenor,spot_rate)],.~tenor,value.var = "spot_rate")[,-c(1)]
+rates <- xts(x=r,order.by = as.Date("2009-05-29"))
+matu <- rates_20090529[,tenor]
+NSParameters <- Nelson.Siegel(rate = rates, maturity = matu)
+y <- NSrates(NSParameters[1,], matu)
+plot(matu,rates,main="Fitting Nelson-Siegel yield curve",
+  xlab=c("Pillars"), type="o")
+lines(matu,y, col=2)
+legend("topleft",legend=c("bootstrapped spot yield curve","fitted yield curve"),
 col=c(1,2),lty=1)
 grid()
 ```
 
-We will now try to fit the model ourselves. In this package, we used par
+We did try to fit first the observed par yield curve, and secondly, the bootstrapped spot rate curve obtained previsously.
+
+We will now try to fit the model ourselves. 
+
 ```{r fitting_NS_man}
 NS_fit <- as.data.table(yc_xts["20090529"])
 
@@ -342,12 +358,27 @@ fig_5_13 <- melt(fig_5_13,id=1,measure = c(2,4:13))
 fig_5_13[,index:=NULL]
 colnames(fig_5_13) <- c("tenor","par_rate")
 fig_5_13[,tenor:=as.numeric(as.character(tenor))]
+fig_5_13<-rates_20090529
 fig_5_13[,NS_model:=z(tenor,paramNS[1,a_0][1],paramNS[1,a_1][1],paramNS[1,a_2][1],paramNS[1,lambda][1])]
 fig_5_13_plot <- melt(fig_5_13,id="tenor")
 ggplot(fig_5_13_plot,aes(x=tenor,y=value,color=variable)) + geom_line()
 ```
 
-The result is quite close !
+It is clear that the NS model fitted the par-yield curve and not the spot rate. There is somthing I do not quite understand here.
+
+Let's try to transform the output of the NS model, supposedly par rates into spot rates.
+
+```{r spot2par}
+all_tenors <- data.table(tenor=1:30)
+fig_5_13<-merge(fig_5_13,all_tenors,all=TRUE)
+fig_5_13[,NS_model:=z(tenor,paramNS[1,a_0][1],paramNS[1,a_1][1],paramNS[1,a_2][1],paramNS[1,lambda][1])]
+fig_5_13[tenor<1,df:=1/(1+NS_model/100*tenor)]
+fig_5_13[tenor>=1,df:=par2df(NS_model)]
+fig_5_13[,NS_Model_spot:=((1/df)^(1/tenor)-1)*100]
+fig_5_13 <- as.data.table(na.approx(fig_5_13))
+fig_5_13_plot <- melt(fig_5_13,id="tenor")
+ggplot(fig_5_13_plot,aes(x=tenor,y=value,color=variable)) + geom_line()
+```
 
 #### 5.3.1.3 Svensson Model
 The package *YieldCurve* used previously enables us to simply test the Svensson model. The svensson model extends the Nelson-Siegel models and enables the yield curve to take a second hump.
@@ -360,9 +391,55 @@ y <- Srates(SParameters[1,], matu,"Spot")
 plot(matu,rates,main="Fitting Svensson yield curve",
   xlab=c("Pillars"), type="o")
 lines(matu,y, col=2)
-legend("topleft",legend=c("observed yield curve","fitted yield curve"),
+legend("topleft",legend=c("observed par yield curve","fitted yield curve"),
+col=c(1,2),lty=1)
+grid()
+
+r <- dcast(rates_20090529[,.(tenor,spot_rate)],.~tenor,value.var = "spot_rate")[,-c(1)]
+rates <- xts(x=r,order.by = as.Date("2009-05-29"))
+matu <- rates_20090529[,tenor]
+SParameters <- Svensson(rate = rates, maturity = matu)
+y <- Srates(SParameters[1,], matu,"Spot")
+plot(matu,rates,main="Fitting Svensson yield curve",
+  xlab=c("Pillars"), type="o")
+lines(matu,y, col=2)
+legend("topleft",legend=c("bootstrapped spot yield curve","fitted yield curve"),
 col=c(1,2),lty=1)
 grid()
 ```
 
-It is noteworthy that the svensson model used here returns spot rates and not par-rates.
+Same as before for NS Model, it is not clear at this stage what are inputs/outputs of the model : either par or spot rates?
+
+### 5.3.2 Non-Classical Approaches
+
+#### 5.3.2.1 Linear Interpolation
+
+This is what we've done in [5.2.5](#anchor_1) !
+
+#### 5.3.2.2 Linear regression
+
+We will now try to use the linear regression technique.
+
+```{r linear_regression_curve_fitting}
+reg <- rates_20090529
+reg.lm <- lm(par_rate~tenor,reg)
+reg[,par_lm:=coef(reg.lm)[1]+coef(reg.lm)[2]*tenor]
+ggplot(reg,aes(x=tenor)) + geom_point(aes(y=par_rate)) + geom_line(aes(y=par_lm))
+```
+
+#### 5.3.2.3 Quadratic regression
+```{r quad_reg_curve_fitting}
+reg.quad2 <- lm(par_rate ~ tenor + I(tenor^2),reg)
+reg[,par_quad2:=coef(reg.quad2)[1]+coef(reg.quad2)[2]*tenor+coef(reg.quad2)[3]*tenor^2]
+ggplot(reg,aes(x=tenor)) + geom_point(aes(y=par_rate)) + geom_line(aes(y=par_quad2))
+```
+
+#### 5.3.2.4 Quartic regression
+```{r quartic_reg_curve_fitting}
+reg.quartic <- lm(par_rate ~ tenor + I(tenor^2)+ I(tenor^3)+ I(tenor^4),reg)
+reg[,par_quartic:=coef(reg.quartic)[1]+coef(reg.quartic)[2]*tenor+coef(reg.quartic)[3]*tenor^2+coef(reg.quartic)[4]*tenor^3+coef(reg.quartic)[5]*tenor^4]
+ggplot(reg,aes(x=tenor)) + geom_point(aes(y=par_rate)) + geom_line(aes(y=par_quartic))
+```
+
+#### 5.3.2.5 Kernel model
+The kernel model consist in taking the average of observed yields in the voisinage of a given tenor. We do not implement it.

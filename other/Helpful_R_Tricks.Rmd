@@ -47,3 +47,6 @@ daily_data[,index_f := as.factor(index)]
 daily_data[,tenors := as.numeric(as.character(variable))]
 ggplot(daily_data,aes(x=tenors,y=value,color=index_f,group=index_f))+ scale_x_continuous(name="Tenors", limits=c(0, 30)) + geom_point()+ geom_line()
 ```
+
+### Finance packages
+[Here](https://cran.r-project.org/web/views/Finance.html) is a list of useful R packages for finance.
