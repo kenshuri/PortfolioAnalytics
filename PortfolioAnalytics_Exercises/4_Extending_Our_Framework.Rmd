@@ -28,7 +28,7 @@ theme_set(theme_minimal())
 ## 4.1 Handling Inflation-Linked Bonds
 
 ### 4.1.1 Revisiting Exposures
-The book presents a useful approximation to treat inflation-linked bonds as nominal yield bonds using the real rates. This approximation consist in taking the inflation risk premimum term in Fisher's theorem to be equal to zero, AND, to consider that the recent inflation (inflation  over the last three months) to be equal to the inflation at the end of the contract (over the last three months of the contract). It might be interesting to have a grasp of the size of the latter approximation : let's compute the range of the approximation for inflation ranging from 0% to 10% annualy.
+The book presents a useful approximation to treat inflation-linked bonds as nominal yield bonds using the real rates. This approximation consist in taking the inflation risk premium term in Fisher's theorem to be equal to zero, AND, to consider that the recent inflation (inflation  over the last three months) to be equal to the inflation at the end of the contract (over the last three months of the contract). It might be interesting to have a grasp of the size of the latter approximation : let's compute the range of the approximation for inflation ranging from 0% to 10% annually.
 
 ```{r approximation_inflation}
 range_infl = seq(0,10/100,0.01/100)

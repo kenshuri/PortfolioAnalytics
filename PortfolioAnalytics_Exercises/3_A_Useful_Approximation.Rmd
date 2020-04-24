@@ -29,7 +29,7 @@ theme_set(theme_minimal())
 In this section, we will illustrate the extra-precision given by adding subsequent term of the Taylor Series to approximate a function. We use the same function as in the book, being f(x) = 5 + 4 * x + 6 * x^2 + 7* x^3 + 15 * ln(x) - 20 * sin(x).
 
 
-First, we take the liberty to grab some experience on the the ggplot2 package! To begin with, we plot the function and its analytical derivatives for values from 0.01 to 5.
+First, we take the liberty to grab some experience on the the ggplot2 package! To begin with, we plot the function and its analytic derivatives for values from 0.01 to 5.
 
 ```{r example_taylor, warning=FALSE}
 f <- expression(5 + 4 * x + 6 * x^2 + 7*x^3 + 15 * log(x) - 20 * sin(x))
@@ -70,4 +70,4 @@ dt_taylor[,t0:=eval(t0_3)][,t1:=eval(t1_3)][,t2:=eval(t2_3)][,t3:=eval(t3_3)][,t
 dt_taylor2 <- melt(dt_taylor,id="x",measure = c("fx","t0","t1","t2","t3","t4","t5"))
 ggplot(dt_taylor2,aes(x=x,y=value)) + geom_line(aes(linetype=variable, color=variable))
 ```
-The story behind this plot is that the more elements are added to the Taylor series, the more precisely it apporximates the real function.
+The story behind this plot is that the more elements are added to the Taylor series, the more precisely it approximates the real function.

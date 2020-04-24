@@ -48,7 +48,7 @@ table_2_2[,df:=1/((1+yield/2)^(2*diff_time))][,cf_df:=cf*df][,diff_time_cf_df:=d
 table_2_2
 ```
 
-Thus we can compute the Analytical Modified Duration as follows :
+Thus we can compute the Analytic Modified Duration as follows :
 ```{r Modified_Duration_Analytical}
 D_M_a <- 1/sum(table_2_2[,cf_df]) * 1/(1+yield/2) * sum(table_2_2[,diff_time_cf_df])
 D_M_a
