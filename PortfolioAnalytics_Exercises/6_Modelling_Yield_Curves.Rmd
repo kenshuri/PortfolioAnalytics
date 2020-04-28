@@ -73,6 +73,23 @@ cor_mat_plot[,tenor_yy:=factor(tenor_y,levels = rev(colnames(cor_mat)))]
 ggplot(cor_mat_plot,aes(x=variable,y=tenor_yy,color=value, size=value)) + geom_point()
 
 ggplot(cor_mat_plot,aes(x=variable,y=tenor_yy)) + geom_tile(aes(fill = value),colour="white") + scale_fill_gradient(low = "white", high = "steelblue")
+
+yc_var_dt <- yc_dt_fig_61[,val_m_1:=shift(value,type="lag"),by=tenor]
+yc_var_dt[,pct_change:=((value-val_m_1)/val_m_1)*100]
+yc_var_dt <- yc_var_dt[,.(index,tenor,pct_change)]
+yc_var_dt<-dcast(yc_var_dt,index~tenor,value.var = "pct_change")
+colnames(yc_var_dt)<-colnames(yc_dt_col_txt)
+cor_mat_change <- as.data.table(cor(yc_var_dt[is.na(BC_2MONTH)==FALSE & is.na(BC_2MONTH)==FALSE,-c(1:4,13)]))
+
+cor_mat_plot<- cor_mat_change[,tenor_y:=colnames(cor_mat_change)]
+cor_mat_plot <- melt(cor_mat_plot,id="tenor_y")
+cor_mat[,tenor_y:=NULL]
+
+cor_mat_plot[,tenor_yy:=factor(tenor_y,levels = rev(colnames(cor_mat)))]
+
+ggplot(cor_mat_plot,aes(x=variable,y=tenor_yy,color=value, size=value)) + geom_point()
+
+ggplot(cor_mat_plot,aes(x=variable,y=tenor_yy)) + geom_tile(aes(fill = value),colour="white") + scale_fill_gradient(low = "white", high = "steelblue")
 ```
 
 Also, it states that **discount factors must be decreasing to avoid negative-rates and thus arbitrage opportunities**: this is not obvious/true anymore!
@@ -128,3 +145,14 @@ ggplot(pca_dt_plot,aes(x=t,y=value, color=variable)) + geom_line()
 ```
 
 Although satisfactory, we will restrain from going further and invest some time on Mathematics theory.
+
+## Digression 1 : Eigen Values et Eigen Vectors
+
+See Annex A.4.3
+
+Also :
+* [Cours Supinfo](https://www.supinfo.com/cours/1LAL/chapitres/04-diagonalisation-matrices-carrees)
+* [Cours univ Paris](https://www.math.univ-paris13.fr/~schwartz/L2/diag.pdf)
+
+
+
