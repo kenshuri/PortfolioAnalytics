@@ -28,6 +28,7 @@ library(fasttime)
 library(xts)
 library(YieldCurve)
 library(plotly)
+library("scatterplot3d")
 theme_set(theme_minimal())
 ```
 
@@ -226,7 +227,17 @@ est_error_plot<-est_error_plot[-c(1:9)]
 est_error_plot[,t_f:=as.factor(t)]
 est_error_plot[,tenor_num:=c(0.25,0.5,1,2,3,5,7,10,20)]
 ggplot(est_error_plot,aes(x=tenor_num))+geom_line(aes(y = est_error,color=t_f),show.legend = FALSE)
-plot_ly(est_error_plot, x = ~tenor_num, y = ~t_f, z = ~est_error, type = "scatter3d", mode = "lines")
+#plot_ly(est_error_plot, x = ~tenor_num, y = ~t_f, z = ~est_error, type = "scatter3d", mode = "lines")
+scatterplot3d(data.table(est_error_plot[,1],est_error_plot[,5],est_error_plot[,3]))
+```
+
+```{r toy_model_prsp}
+surface <- est_error_plot[,.(t,tenor,est_error)]
+surface <- dcast(surface,t~tenor,value.var = "est_error")
+x<-as.vector(surface[,t])
+y<-c(0.25,0.5,1,2,3,5,7,10,20)
+z<-as.matrix(surface[,-1])
+persp(x,y,z,theta = -30,xlab = "time",ylab = "tenor",zlab = "estimation error")
 ```
 
 ### 6.4.2 A Complex Example
