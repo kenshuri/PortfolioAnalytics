@@ -1,6 +1,6 @@
 ---
 title: "3. A Useful Approximation"
-author: "Alexis Sciau"
+author: "Alexis Kenshuri"
 date: "06/04/2020"
 output:
   html_document:

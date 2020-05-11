@@ -1,6 +1,6 @@
 ---
 title: "6. Modelling Yield Curves"
-author: "Alexis Sciau"
+author: "Alexis Kenshuri"
 date: "24 avril 2020"
 output:
   html_document:
@@ -27,6 +27,7 @@ library(pracma)
 library(fasttime)
 library(xts)
 library(YieldCurve)
+library(plotly)
 theme_set(theme_minimal())
 ```
 
@@ -141,12 +142,18 @@ pca_dt <- as.data.table(pca$x)
 pca_dt <- pca_dt[,c(1:3)]
 pca_dt[,t:=index(rp)]
 pca_dt_plot <- melt(pca_dt,id="t")
-ggplot(pca_dt_plot,aes(x=t,y=value, color=variable)) + geom_line()
+ggplot(pca_dt_plot,aes(x=t,y=value, color=variable)) + geom_line() + ggtitle("Three Largest Principal Components") 
+
+pca_loadings_dt <- as.data.table(pca$rotation)
+pca_loadings_dt <- pca_loadings_dt[,c(1:3)]
+pca_loadings_dt[,t:=c(0.25,0.5,1,2,3,5,7,10,20)]
+pca_loadings_dt_plot<-melt(pca_loadings_dt,id="t")
+ggplot(pca_loadings_dt_plot,aes(x=t,y=value, color=variable)) + geom_line()  + ggtitle("PCA loadings")
 ```
 
 Although satisfactory, we will restrain from going further and invest some time on Mathematics theory.
 
-## Digression 1 : Eigen Values et Eigen Vectors
+### Digression 1 : Eigen Values et Eigen Vectors
 
 See Annex A.4.3
 
@@ -155,4 +162,71 @@ Also :
 * [Cours univ Paris](https://www.math.univ-paris13.fr/~schwartz/L2/diag.pdf)
 
 
+### Digression 2 : Proxies for PCA factors
 
+In p173, the shaded box provides us with proxies for the level, slope and curvature. Let's try to compute correlation to see if these proxies are satisfying.
+
+```{r PCA_proxies}
+rp_dt <- as.data.table(rp)
+colnames(rp_dt)<-c("t","M3","M6","Y1","Y2","Y3","Y5","Y7","Y10","Y20")
+rp_dt[,level:=Y20]
+rp_dt[,slope:=Y20-M3]
+rp_dt[,curvature:=2*Y5 - (M3+Y20)]
+cor(pca_dt[,PC1],rp_dt[,level])
+cor(pca_dt[,PC2],rp_dt[,slope])
+cor(pca_dt[,PC3],rp_dt[,curvature])
+```
+
+The correlation between proxies and PCA factors is good but not as good as the one found in the book.
+
+## 6.4 Model Examples
+
+### 6.4.1 Toy Model
+
+Let's tru to fit the toy model to our data.
+
+```{r toy_model}
+PC1_model <- ar.ols(pca_dt[,PC1],order.max=1,intercept = TRUE,demean = FALSE)
+PC2_model <- ar.ols(pca_dt[,PC2],order.max=1,intercept = TRUE,demean = FALSE)
+PC3_model <- ar.ols(pca_dt[,PC3],order.max=1,intercept = TRUE,demean = FALSE)
+
+map_dt <- as.data.table(rp)
+colnames(map_dt)<-c("t","M3","M6","Y1","Y2","Y3","Y5","Y7","Y10","Y20")
+map_dt <- melt(map_dt,id="t")
+colnames(map_dt) <- c("t","tenor","yield")
+map_dt[,yield_n:=shift(yield,1,type="lead"),by=tenor]
+map_dt[,yield_diff:=yield_n-yield]
+map_dt<-merge(map_dt,pca_dt)
+
+mapping <- lm(yield_diff~PC1+PC2+PC3-1,map_dt)
+
+parameters<- data.table(map_beta=mapping$coefficients,dyn_alpha=c(PC1_model$x.intercept,PC2_model$x.intercept,PC3_model$x.intercept),dyn_gamma=c(PC1_model$ar,PC2_model$ar,PC3_model$ar))
+print(parameters)
+```
+
+The parameters that we estimated for the model are far from the ones given in the book. We will nevertheless try to estimate the in-sample fit of our model.
+
+```{r toy_model_in_sample_fit}
+avg_yield_by_tenor <- map_dt[,avg_yield:=mean(yield),by=tenor][1:9,.(tenor,avg_yield)]
+map_dt[,estimated_yield_aux:=yield+parameters[1,map_beta]*PC1+parameters[2,map_beta]*PC2+parameters[3,map_beta]*PC3]
+map_dt[,estimated_yield := shift(estimated_yield_aux,1,type="lag"),by=tenor]
+avg_est_yield_by_tenor <- map_dt[,avg_est_yield:=mean(estimated_yield,na.rm=TRUE),by=tenor][1:9,.(tenor,avg_est_yield)]
+toy_plot <- data.table(t=c(0.25,0.5,1,2,3,5,7,10,20),avg_yield_by_tenor[,avg_yield],avg_est_yield_by_tenor[,avg_est_yield])
+colnames(toy_plot)<-c("t","Actual_Average_Yield","Estimated_Average_Yield")
+toy_plot<-melt(toy_plot,id="t")
+ggplot(toy_plot,aes(x=t,y=value,color=variable))+geom_line()+scale_y_continuous(limits = c(1,6))
+```
+
+In the above, we only tested the fit of the mapping (hypothesis A3), it thus seems logical that this fit is almost perfect (on average). We didn't test for the fit of the dynamic model. I understand that this is the same that it was done in the book p176, thus making the difference observed hardly explainable.
+
+```{r toy_model_est_errors}
+map_dt[,est_error:=estimated_yield-yield]
+est_error_plot <- as.data.table(map_dt[,.(t,tenor,est_error)])
+est_error_plot<-est_error_plot[-c(1:9)]
+est_error_plot[,t_f:=as.factor(t)]
+est_error_plot[,tenor_num:=c(0.25,0.5,1,2,3,5,7,10,20)]
+ggplot(est_error_plot,aes(x=tenor_num))+geom_line(aes(y = est_error,color=t_f),show.legend = FALSE)
+plot_ly(est_error_plot, x = ~tenor_num, y = ~t_f, z = ~est_error, type = "scatter3d", mode = "lines")
+```
+
+### 6.4.2 A Complex Example

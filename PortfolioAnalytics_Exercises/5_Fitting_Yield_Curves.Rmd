@@ -1,6 +1,6 @@
 ---
 title: "5. Fitting Yield Curves"
-author: "Alexis Sciau"
+author: "Alexis Kenshuri"
 date: "08/04/2020"
 output:
   html_document:

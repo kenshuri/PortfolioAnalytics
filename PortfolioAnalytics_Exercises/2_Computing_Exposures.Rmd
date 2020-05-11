@@ -1,6 +1,6 @@
 ---
 title: "2. Computing Exposures"
-author: "Alexis Sciau"
+author: "Alexis Kenshuri"
 date: "02/04/2020"
 output:
   pdf_document:
