@@ -240,4 +240,48 @@ z<-as.matrix(surface[,-1])
 persp(x,y,z,theta = -30,xlab = "time",ylab = "tenor",zlab = "estimation error")
 ```
 
+As outlined in the book, the estimation error falls within +/-100bps.
+
 ### 6.4.2 A Complex Example
+
+The complex example will not be implemented here
+
+### 6.4.3 A Simpler Example
+
+We will proceed to fit a Diebold-Li Model to our data, which consist in extracting Nelson-Siegel parameters for every observation date.
+
+```{r diebold_li}
+# Get the same data as used in the book : each month from 01/1997 to 12/2011
+rates <- to.monthly(na.omit(yc_xts["1997/2011"][,-c(1,2,12)]),indexAt = "lastof", OHLC=FALSE)
+
+# Apply Nelson-Siegel on every date
+matu <- c(0.25,0.5,1,2,3,5,7,10,30)
+NSParameters <- Nelson.Siegel(rate = rates, maturity = matu)
+NSParameters_plot <- NSParameters[,-c(4)]
+NSParameters_plot <- melt(as.data.table(NSParameters_plot),id.vars="index")
+ggplot(NSParameters_plot, aes(x=index,y=value,color=variable)) + geom_line() + ggtitle("Nelson-Siegel factors") + scale_color_discrete(name = "Factors", labels = c("a_t : Level", "b_t : Slope", "c_t : Curvature"))
+
+# Compute NS Rates that thanks to the NS parameters
+NS_RAtes <- NSrates(NSParameters,maturity = matu)
+
+# Test the average NS fit
+average_yield <- colMeans(rates)
+average_est_yield <- colMeans(NS_RAtes)
+average_fit <- data.table(tenor=matu,yield=average_yield,estimated_yield=average_est_yield)
+ggplot(average_fit,aes(x=matu))+geom_line(aes(y=yield,color="Actual Average Yield"))+geom_line(aes(y=estimated_yield,color="Estimated Average Yield"))+ theme(legend.title=element_blank())
+
+# Test the global in-sample fit
+rates_m <- as.matrix(rates)
+NS_Rates_m <- as.matrix(NS_RAtes)
+fit_m <- rates_m - NS_Rates_m
+fit <- as.data.table(fit_m)
+fit[,index:=rownames(fit_m)]
+fit_plot <- melt(fit,id="index")
+fit_plot[,index_f:=as.factor(index)]
+fit_plot[,tenor:=as.numeric(as.character(variable))]
+fit_plot<-fit_plot[order(index,tenor)]
+ggplot(fit_plot,aes(x=tenor)) + geom_line(aes(y = value,color=index_f),show.legend = FALSE)
+plot_ly(fit_plot, x = ~tenor, y = ~index_f, z = ~value, type = "scatter3d", mode = "lines")
+```
+
+As outlined in the book, the in-sample fit of the Diebold-Li model is a lot better : the estimation error falls within +/-25bps.

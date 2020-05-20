@@ -32,6 +32,8 @@ theme_set(theme_minimal())
 ## 5.1 Getting started
 Though we do not have access to the same data as the book, ie a collection of US Treasury bond yields as at 29 May 2009, we retrieve from the [US treasury website](https://www.treasury.gov/resource-center/data-chart-center/interest-rates/Pages/TextView.aspx?data=yield "Daily Treasury Yield Curve Rates  from US Treasury") the daily treasury yield curve rates. Plotting this curve, we expect to get something close to the fig 5.2.
 
+We also give the reader [some reference to ponder](https://berkorbay.github.io/fe522/04_Modeling_Term_Structure.html).
+
 ```{r US_yield_curve_example, message=FALSE, warning=FALSE}
 yc_dt <- fread("../data/data_YC_US")
 yc_dt[,index:=fastPOSIXct(index)]
@@ -210,7 +212,7 @@ prices_optim_less_than_1[sum_norm_diff == min(sum_norm_diff),a][1]
 
 Numerically, we find that the best parameter for a is 0,5055. This is consistent with the result found in Excel.
 
-We know can try to solve the same problem with continuous compounding limiting ourselves to the same tenors.
+We now can try to solve the same problem with continuous compounding limiting ourselves to the same tenors.
 
 ```{r best_param_a_continous}
 prices_optim_less_than_1_continuous <- melt(prices_optim,id=1,measure = c(2,4:6))
